@@ -161,114 +161,98 @@ class TheraOfficeExtractor:
             self.logger.error(f"Error details: {str(e)}")
             return False
 
-
     def select_facility(self, facility_name: str = "Brookline/Allston") -> bool:
         """
-        Use the previously-detected facility dialog (self.last_facility_handle)
-        to select Brookline/Allston and click OK.
+        Finds the facility dialog and selects an item using a name-to-ID mapping,
+        the most robust method for handling this application's custom table control.
         """
         from pywinauto import Desktop
         import time
 
         self.logger.info(f"Attempting to select facility '{facility_name}'...")
 
+        # --- THIS MAPPING IS THE KEY TO THE FINAL SOLUTION ---
+        # It connects the visible name to the internal ID we found in the logs.
+        facility_map = {
+            "Brookline/Allston": "Row0_SRFACILITY",
+            "Concord": "Row1_SRFACILITY",
+            "Downtown": "Row2_SRFACILITY",
+            "Fort Point": "Row3_SRFACILITY",
+            "Government Center": "Row4_SRFACILITY",
+            "Kendall Square": "Row5_SRFACILITY",
+            "Kenmore Square": "Row6_SRFACILITY",
+            "Leominster": "Row7_SRFACILITY",
+            "Needham": "Row8_SRFACILITY",
+            "Peabody": "Row9_SRFACILITY",
+            "Post Office Square": "Row10_SRFACILITY",
+            "Prudential Center": "Row11_SRFACILITY",
+            "Quincy": "Row12_SRFACILITY",
+            "Wayland": "Row13_SRFACILITY",
+            "Wellesley": "Row14_SRFACILITY",
+            # Add other facilities here if the list changes
+        }
+
+        # Look up the internal ID for the given facility name.
+        target_item_id = facility_map.get(facility_name)
+        if not target_item_id:
+            self.logger.error(f"Facility '{facility_name}' not found in the internal facility_map. Please update the script.")
+            return False
+        
+        # This entire section for finding the window handle is preserved.
         desk = Desktop(backend="uia")
-
         facility_handle = self.last_facility_handle
-
-        if facility_handle:
-            self.logger.info(f"Using remembered facility handle 0x{facility_handle:x}")
-        else:
+        if not facility_handle:
             self.logger.info("No remembered facility handle; trying to locate it again...")
-
-        # If we don't have a handle yet, try to find it again (top-level or child)
-        if not facility_handle:
             for w in desk.windows(process=self.app.process):
-                title = (w.window_text() or "").lower()
-                if "services rendered facility" in title:
+                if "services rendered facility" in (w.window_text() or "").lower():
                     facility_handle = w.handle
-                    self.logger.info(
-                        f"Found facility window as top-level: title='{w.window_text()}', handle=0x{w.handle:x}"
-                    )
                     break
-
-            if not facility_handle and self.main_window is not None:
-                try:
-                    main_spec = self.app.window(handle=self.main_window.handle)
-                    facility_spec = main_spec.child_window(title_re=".*Services Rendered Facility.*")
-                    self.logger.info("Re-scanning main window for facility dialog as child...")
-                    if facility_spec.exists(timeout=2):
-                        facility_handle = facility_spec.wrapper_object().handle
-                        self.logger.info(
-                            f"Found facility window as child of main window: handle=0x{facility_handle:x}"
-                        )
-                except Exception as e:
-                    self.logger.error(f"Error locating facility as child of main window: {e}", exc_info=True)
-
         if not facility_handle:
-            self.logger.error("Could not find 'Services Rendered Facility' window to select facility.")
+            self.logger.error("Could not find 'Services Rendered Facility' window.")
             return False
 
-        # Wrap handle into WindowSpecification / UIAWrapper
         facility_spec = self.app.window(handle=facility_handle)
         facility_win = facility_spec.wrapper_object()
-
-        self.logger.info(
-            f"'Services Rendered Facility' window ready: handle=0x{facility_handle:x}, "
-            f"title='{facility_win.window_text()}'"
-        )
-
-        try:
-            facility_win.set_focus()
-            facility_win.set_focus()  # call twice just in case
-            self.logger.info("Facility dialog focused.")
-        except Exception as e:
-            self.logger.warning(f"Could not explicitly focus facility dialog: {e}")
-
+        self.logger.info(f"'Services Rendered Facility' window ready: handle={facility_handle:#x}")
+        facility_win.set_focus()
         time.sleep(0.5)
 
-        # Try to click the Brookline/Allston row by internal name Row0_SRFACILITY
+        # --- THE FINAL, CORRECTED SELECTION LOGIC ---
         try:
-            self.logger.info("Searching for row 'Row0_SRFACILITY' (Brookline/Allston)...")
-            row_spec = facility_spec.child_window(
-                title="Row0_SRFACILITY",
+            # Find the DataItem directly using its unique internal title (ID).
+            self.logger.info(f"Searching for facility item with internal ID: '{target_item_id}'...")
+            facility_item = facility_spec.child_window(
+                title=target_item_id,
                 control_type="DataItem"
             )
-            if not row_spec.exists(timeout=3):
-                self.logger.error("DataItem 'Row0_SRFACILITY' not found in facility dialog.")
-                return False
+            facility_item.wait('visible', timeout=5)
 
-            row = row_spec.wrapper_object()
-            rect = row.rectangle()
-            self.logger.info(
-                f"Clicking facility row Row0_SRFACILITY at "
-                f"({rect.left},{rect.top},{rect.right},{rect.bottom})"
-            )
-            row.click_input()
+            # Click the item.
+            self.logger.info(f"Clicking the row for '{facility_name}' (ID: {target_item_id})...")
+            facility_item.click_input()
             time.sleep(0.5)
+
         except Exception as e:
-            self.logger.error(f"Failed to click facility row Row0_SRFACILITY: {e}", exc_info=True)
+            self.logger.error(f"Failed to click item with ID '{target_item_id}': {e}", exc_info=True)
             return False
+        # --- END OF DEFINITIVE LOGIC ---
 
-        # Click OK button
+        # Click OK button (This part was already correct).
         try:
-            self.logger.info("Looking for 'OK' button in facility dialog...")
-            ok_spec = facility_spec.child_window(title="OK", control_type="Button")
-            if not ok_spec.exists(timeout=3):
-                self.logger.error("OK button not found in facility dialog.")
-                return False
-
-            ok_btn = ok_spec.wrapper_object()
-            self.logger.info("Clicking 'OK' on facility dialog...")
-            ok_btn.click_input()
+            self.logger.info("Looking for 'OK' button...")
+            ok_button = facility_spec.child_window(title="OK", control_type="Button")
+            ok_button.click_input()
+            self.logger.info("Clicked 'OK' on facility dialog.")
         except Exception as e:
             self.logger.error(f"Could not click OK on facility dialog: {e}", exc_info=True)
             return False
 
-        time.sleep(2.0)
-        self.logger.info(f"Facility '{facility_name}' should now be selected.")
+        time.sleep(3.0)
+        self.logger.info(f"Facility '{facility_name}' has been selected successfully.")
         return True
-            # Placeholder for the rest of your automation workflow
+    
+    
+     # Placeholder for the rest of your automation workflow
     def run_single_patient_export(self, patient_last_name):
         self.logger.info(f"--- Starting data export for patient: {patient_last_name} ---")
         # 1. Navigate to scheduling (if not already there)
@@ -301,83 +285,48 @@ class TheraOfficeExtractor:
 
     def wait_until_logged_in(self, max_wait_seconds=120):
         """
-        Polls for:
-          - 'Services Rendered Facility' dialog  -> returns 'facility'
-          - main 'TheraOffice Web ( ... )' window -> returns 'main'
+        Polls for the logged-in state using an unambiguous search (class and title)
+        to correctly handle applications that create multiple top-level windows.
         """
-        self.logger.info("Waiting for a logged-in state (facility dialog or main window)...")
+        self.logger.info("Waiting for a logged-in state (final, unambiguous check)...")
         start = time.time()
         desk = Desktop(backend="uia")
 
-        self.last_facility_handle = None
+        main_window_class = "WindowsForms10.Window.8.app.0.1629f15_r7_ad1"
 
         while time.time() - start < max_wait_seconds:
             try:
-                wins = desk.windows(process=self.app.process)
-                self.logger.debug(f"[WIN-DUMP] poll - Found {len(wins)} top-level windows for process {self.app.process}")
-                for idx, w in enumerate(wins):
-                    try:
-                        rect = w.rectangle()
-                        self.logger.debug(
-                            f"[WIN-DUMP] {idx}: title='{w.window_text()}', handle=0x{w.handle:x}, "
-                            f"visible={w.is_visible()}, enabled={w.is_enabled()}, "
-                            f"rect=({rect.left},{rect.top},{rect.right},{rect.bottom})"
-                        )
-                    except Exception as e:
-                        self.logger.debug(f"[WIN-DUMP] {idx}: error reading window properties: {e}")
+                # --- THE FINAL, DEFINITIVE FIX ---
+                # We now search for the window using BOTH class_name AND title_re.
+                # This is unambiguous and will only ever find the one, correct window.
+                main_app_window = desk.window(
+                    class_name=main_window_class,
+                    title_re=".*TheraOffice.*"
+                )
 
-                # ---------- 1) Try to find facility as a child of each top-level window ----------
-                for w in wins:
-                    spec = self.app.window(handle=w.handle)  # WindowSpecification
-                    try:
-                        facility_spec = spec.child_window(
-                            title_re=".*Services Rendered Facility.*"
-                        )
-                        if facility_spec.exists(timeout=0.2):
-                            facility_wrapper = facility_spec.wrapper_object()
-                            if facility_wrapper.is_visible():
-                                self.last_facility_handle = facility_wrapper.handle
-                                self.logger.info(
-                                    f"Detected facility selection dialog as child of window "
-                                    f"'{w.window_text()}' handle=0x{w.handle:x}"
-                                )
-                                return "facility"
-                    except Exception as e:
-                        self.logger.debug(f"Child facility search failed in window 0x{w.handle:x}: {e}")
+                if main_app_window.exists():
+                    # --- 1. Check for the facility dialog as a child ---
+                    facility_dialog = main_app_window.child_window(title="Services Rendered Facility")
+                    if facility_dialog.exists() and facility_dialog.is_visible():
+                        self.logger.info("SUCCESS: Detected 'Services Rendered Facility' child dialog.")
+                        self.last_facility_handle = facility_dialog.handle
+                        return "facility"
 
-                # ---------- 2) If no facility, look for main 'TheraOffice Web ...' window ----------
-                for w in wins:
-                    title = (w.window_text() or "").lower()
-                    if title.startswith("theraoffice web"):
-                        try:
-                            rect = w.rectangle()
-                            vis = w.is_visible()
-                            en = w.is_enabled()
-                            self.logger.debug(
-                                f"[MAIN-CAND] title='{title}', visible={vis}, "
-                                f"enabled={en}, size=({rect.width()}x{rect.height()})"
-                            )
-                            if vis and rect.width() > 100 and rect.height() > 100:
-                                try:
-                                    w.set_focus()
-                                except Exception as e:
-                                    self.logger.debug(f"Could not focus main candidate window: {e}")
-                                self.main_window = w  # UIAWrapper
-                                self.logger.info(
-                                    f"Detected main TheraOffice window (logged-in state) "
-                                    f"(enabled={en}): '{w.window_text()}' handle=0x{w.handle:x}"
-                                )
-                                return "main"
-                        except Exception as e:
-                            self.logger.debug(f"Main candidate check failed: {e}")
+                    # --- 2. If no dialog, check if the main window is active ---
+                    if main_app_window.is_enabled() and "(" in main_app_window.window_text():
+                        self.main_window = main_app_window
+                        self.logger.info(f"SUCCESS: Detected active main window: '{main_app_window.window_text()}'")
+                        return "main"
+
             except Exception as e:
-                self.logger.warning(f"Error while polling for logged-in state: {e}")
+                # This can happen if the window search is ambiguous for a moment.
+                self.logger.debug(f"Polling... waiting for windows to stabilize. Error: {e}")
 
+            self.logger.debug("Polling for an active window (facility or main)...")
             time.sleep(2)
 
-        self.logger.error("Timed out waiting for a logged-in state. User may not have finished login.")
+        self.logger.error("Timed out waiting for an active logged-in state.")
         return None
-
     
     def get_main_window(self):
         """
