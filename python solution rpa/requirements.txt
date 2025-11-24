@@ -1,0 +1,7 @@
+psutil
+pywinauto
+playwright
+pyautogui
+pytesseract
+opencv-python
+

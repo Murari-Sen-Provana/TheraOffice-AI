@@ -1,0 +1,39 @@
+2025-11-24 17:53:02,564 - TheraOfficeRPA - INFO - ==============================================
+2025-11-24 17:53:02,565 - TheraOfficeRPA - INFO - === TheraOffice Automation (DYNAMIC) STARTING ===
+2025-11-24 17:53:02,565 - TheraOfficeRPA - INFO - ==============================================
+2025-11-24 17:53:02,569 - TheraOfficeRPA - INFO - Configuration loaded successfully from C:\Users\murari.sen\Downloads\python solution rpa\python solution rpa\config.ini
+2025-11-24 17:53:02,569 - TheraOfficeRPA - INFO - Checking for and terminating any existing 'TheraOffice.exe' processes...
+2025-11-24 17:53:02,587 - TheraOfficeRPA - INFO - Terminating PID 4656 (TheraOffice.exe)
+2025-11-24 17:53:02,718 - TheraOfficeRPA - INFO - Step 1.0: Launching TheraOffice with debugging enabled via environment variable...
+2025-11-24 17:53:02,718 - TheraOfficeRPA - INFO - Set WEBVIEW2_REMOTE_DEBUGGING_PORT=9223
+2025-11-24 17:53:03,027 - TheraOfficeRPA - INFO - Launch command sent. Waiting for process to appear...
+2025-11-24 17:53:15,029 - TheraOfficeRPA - INFO - Connecting main window handle with pywinauto: 'TheraOffice.exe'...
+2025-11-24 17:53:17,177 - TheraOfficeRPA - INFO - Successfully launched TheraOffice and connected main window handle.
+2025-11-24 17:53:17,178 - TheraOfficeRPA - INFO - Step 1.1: Attempting login by finding window via its unique Class Name...
+2025-11-24 17:53:17,178 - TheraOfficeRPA - INFO - Searching for window with Class Name: 'WindowsForms10.Window.8.app.0.1629f15_r7_ad1'...
+2025-11-24 17:53:17,861 - TheraOfficeRPA - INFO - Correct login window found! Title is now: ''
+2025-11-24 17:53:20,837 - TheraOfficeRPA - INFO - Filled username.
+2025-11-24 17:53:22,663 - TheraOfficeRPA - INFO - Filled password.
+2025-11-24 17:53:24,456 - TheraOfficeRPA - INFO - Clicked Log In button.
+2025-11-24 17:53:24,457 - TheraOfficeRPA - INFO - Login submitted. Waiting 5 seconds for the next screen...
+2025-11-24 17:53:29,458 - TheraOfficeRPA - INFO - Dynamic login succeeded.
+2025-11-24 17:53:29,458 - TheraOfficeRPA - INFO - Waiting for a logged-in state (facility dialog or main window)...
+2025-11-24 17:53:29,458 - TheraOfficeRPA - INFO - Waiting for a logged-in state (facility dialog or main window)...
+2025-11-24 17:53:29,608 - TheraOfficeRPA - DEBUG - [WIN-DUMP] poll - Found 1 top-level windows for process 34072
+2025-11-24 17:53:29,612 - TheraOfficeRPA - DEBUG - [WIN-DUMP] 0: title='', handle=0x690bb2, visible=True, enabled=True, rect=(2325,515,2461,554)
+2025-11-24 17:53:31,960 - TheraOfficeRPA - DEBUG - [WIN-DUMP] poll - Found 1 top-level windows for process 34072
+2025-11-24 17:53:31,962 - TheraOfficeRPA - DEBUG - [WIN-DUMP] 0: title='', handle=0x690bb2, visible=True, enabled=True, rect=(2325,515,2461,554)
+2025-11-24 17:53:34,924 - TheraOfficeRPA - DEBUG - [WIN-DUMP] poll - Found 1 top-level windows for process 34072
+2025-11-24 17:53:34,928 - TheraOfficeRPA - DEBUG - [WIN-DUMP] 0: title='', handle=0x690bb2, visible=True, enabled=True, rect=(2325,515,2461,554)
+2025-11-24 17:53:37,499 - TheraOfficeRPA - DEBUG - [WIN-DUMP] poll - Found 2 top-level windows for process 34072
+2025-11-24 17:53:37,502 - TheraOfficeRPA - DEBUG - [WIN-DUMP] 0: title='TheraOffice Web (Joint Ventures - megbus)', handle=0x2f0cca, visible=True, enabled=False, rect=(-8,-8,1374,728)
+2025-11-24 17:53:37,504 - TheraOfficeRPA - DEBUG - [WIN-DUMP] 1: title='', handle=0x690bb2, visible=True, enabled=False, rect=(2325,515,2461,554)
+2025-11-24 17:53:38,392 - TheraOfficeRPA - DEBUG - [MAIN-CAND] title='theraoffice web (joint ventures - megbus)', visible=True, enabled=False, size=(1382x736)
+2025-11-24 17:53:38,463 - TheraOfficeRPA - INFO - Detected main TheraOffice window (logged-in state) (enabled=False): 'TheraOffice Web (Joint Ventures - megbus)' handle=0x2f0cca
+2025-11-24 17:53:38,465 - TheraOfficeRPA - INFO - Main window is ready.
+2025-11-24 17:53:38,466 - TheraOfficeRPA - INFO - Scanning for Shared User Accounts OK button...
+2025-11-24 17:54:18,926 - TheraOfficeRPA - WARNING - Did NOT detect Shared User Accounts popup within timeout.
+2025-11-24 17:54:18,929 - TheraOfficeRPA - INFO - Automation workflow can now proceed.
+2025-11-24 17:54:18,935 - TheraOfficeRPA - INFO - ==============================================
+2025-11-24 17:54:18,942 - TheraOfficeRPA - INFO - === TheraOffice Automation (DYNAMIC) FINISHED ===
+2025-11-24 17:54:18,948 - TheraOfficeRPA - INFO - ==============================================
