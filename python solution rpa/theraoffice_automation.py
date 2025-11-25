@@ -403,37 +403,70 @@ class TheraOfficeExtractor:
             self.logger.error(f"Failed to print control identifiers: {e}", exc_info=True)
         self.logger.info("=== END MAIN WINDOW CONTROL TREE DUMP ===")
     
-    def dismiss_shared_user_accounts_warning(self, timeout=15):
+    
+    def dismiss_shared_user_accounts_warning(self, timeout=30):
         """
-        Finds and dismisses the 'Shared User Accounts' popup by its title
-        and then clicks the 'OK' button within it.
+        Aggressively attempts to dismiss the 'Shared User Accounts' popup using
+        multiple strategies until it is confirmed to be gone.
         """
         self.logger.info("Scanning for 'Shared User Accounts' popup...")
         from pywinauto import Desktop
+        from pywinauto.keyboard import send_keys
+        import time
 
-        try:
-            # Search the entire desktop for the popup window by its title.
-            # We use a short timeout because it should appear quickly if it's going to.
-            popup_window = Desktop(backend="uia").window(title="Shared User Accounts")
-            popup_window.wait('visible', timeout=timeout)
-            
-            self.logger.info("Found 'Shared User Accounts' popup. Looking for OK button...")
-            
-            # Find the OK button within the popup window.
-            # Based on the screenshot, its title is simply "OK".
-            ok_button = popup_window.child_window(title="OK", control_type="Button")
-            ok_button.wait('enabled', timeout=5)
-            
-            # Click the button to dismiss the dialog.
-            ok_button.click_input()
-            self.logger.info("Clicked 'OK' to dismiss the Shared User Accounts popup.")
-            time.sleep(2) # Wait a moment for the dialog to close
-            return True
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                # 1. Check if the popup exists
+                popup = Desktop(backend="uia").window(auto_id="frmSharedAccounts")
+                
+                if not popup.exists() or not popup.is_visible():
+                    # If popup is gone, check if main window is enabled to be sure
+                    main_window_class = "WindowsForms10.Window.8.app.0.1629f15_r7_ad1"
+                    main_win = Desktop(backend="uia").window(class_name=main_window_class)
+                    if main_win.exists() and main_win.is_enabled():
+                        self.logger.info("Popup is gone and main window is enabled.")
+                        return True
+                    else:
+                        # Popup might be gone, but main window still disabled? Wait a bit.
+                        time.sleep(0.5)
+                        continue
 
-        except Exception:
-            # This is not an error, it just means the popup didn't appear this time.
-            self.logger.warning(f"Did NOT detect 'Shared User Accounts' popup within {timeout} seconds. Continuing...")
-            return False
+                self.logger.info("Popup found. Attempting to dismiss...")
+
+                # --- STRATEGY 1: Click OK Button ---
+                try:
+                    ok_btn = popup.child_window(auto_id="SimpleButtonOK", control_type="Button")
+                    if ok_btn.exists():
+                        self.logger.info("Strategy 1: Clicking 'OK' button...")
+                        ok_btn.set_focus()
+                        ok_btn.click_input()
+                except: pass
+
+                # --- STRATEGY 2: Send ENTER ---
+                try:
+                    self.logger.info("Strategy 2: Sending ENTER...")
+                    popup.set_focus()
+                    send_keys('{ENTER}')
+                except: pass
+
+                # --- STRATEGY 3: Click Close (X) ---
+                try:
+                    close_btn = popup.child_window(title="Close", control_type="Button")
+                    if close_btn.exists():
+                        self.logger.info("Strategy 3: Clicking 'Close' button...")
+                        close_btn.click_input()
+                except: pass
+                
+                # Wait a moment to see if it worked
+                time.sleep(1)
+
+            except Exception as e:
+                self.logger.warning(f"Error during popup handling: {e}")
+                time.sleep(1)
+
+        self.logger.warning("Timeout reached. Popup may still be present.")
+        return False
 
 
     def find_window(self, name=None, automation_id=None, class_name=None):
@@ -507,4 +540,138 @@ class TheraOfficeExtractor:
 
         except Exception as e:
             self.logger.error(f"Failed to navigate to Scheduling. Error: {e}", exc_info=True)
+            return False
+        
+    def search_for_patient(self, patient_name: str) -> bool:
+        """
+        Finds the patient search box, clicks it to focus, and types the patient's name.
+        This method uses keyboard simulation which is more reliable for search bars.
+        """
+        self.logger.info(f"Searching for patient: '{patient_name}'...")
+        try:
+            if not self.main_window or not self.main_window.exists():
+                self.logger.error("Main window not found. Cannot search for patient.")
+                return False
+
+            # Find the search edit box by its title "Search:"
+            # We use the 'Edit' control type as identified in previous logs.
+            search_box = self.main_window.child_window(
+                title="Search:",
+                control_type="Edit"
+            )
+            search_box.wait('visible', timeout=10)
+            
+            # --- THE FIX: CLICK AND TYPE ---
+            # 1. Click to focus the search box
+            self.logger.info("Clicking search box to focus...")
+            search_box.click_input()
+            time.sleep(0.5)
+            
+            # 2. Type the name using keyboard simulation
+            self.logger.info(f"Typing '{patient_name}'...")
+            search_box.type_keys(patient_name, with_spaces=True)
+            time.sleep(0.5)
+            
+            # 3. Press Enter to search
+            self.logger.info("Pressing Enter...")
+            search_box.type_keys('{ENTER}')
+            
+            self.logger.info("Patient search initiated.")
+            time.sleep(3) # Wait for search results to load
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to search for patient. Error: {e}", exc_info=True)
+            return False
+
+
+    def debug_scheduling_screen(self):
+        """
+        DIAGNOSTIC: Prints all controls on the Scheduling screen so we can
+        find the 'Facility' button or dropdown.
+        """
+        self.logger.info("--- STARTING SCHEDULING SCREEN DIAGNOSTIC ---")
+        time.sleep(3) # Wait for screen to fully render
+        try:
+            # Print the control identifiers to the log
+            self.main_window.print_control_identifiers()
+            self.logger.info("--- FINISHED SCHEDULING SCREEN DIAGNOSTIC ---")
+            self.logger.error("Please copy the 'Control Identifiers' output from the terminal.")
+        except Exception as e:
+            self.logger.error(f"Diagnostic failed: {e}")
+
+
+    def handle_scheduling_facility(self, facility_name: str = "Brookline/Allston") -> bool:
+        """
+        Handles the 'Select Facility' dialog in Scheduling using the robust
+        Name-to-ID mapping, which is proven to work for this application's tables.
+        """
+        self.logger.info(f"Checking for 'Select Facility' dialog in Scheduling...")
+        from pywinauto import Desktop
+        import time
+
+        # --- REUSE THE PROVEN MAPPING ---
+        facility_map = {
+            "Brookline/Allston": "Row0_SRFACILITY",
+            "Concord": "Row1_SRFACILITY",
+            "Downtown": "Row2_SRFACILITY",
+            "Fort Point": "Row3_SRFACILITY",
+            "Government Center": "Row4_SRFACILITY",
+            "Kendall Square": "Row5_SRFACILITY",
+            "Kenmore Square": "Row6_SRFACILITY",
+            "Leominster": "Row7_SRFACILITY",
+            "Needham": "Row8_SRFACILITY",
+            "Peabody": "Row9_SRFACILITY",
+            "Post Office Square": "Row10_SRFACILITY",
+            "Prudential Center": "Row11_SRFACILITY",
+            "Quincy": "Row12_SRFACILITY",
+            "Wayland": "Row13_SRFACILITY",
+            "Wellesley": "Row14_SRFACILITY",
+        }
+
+        target_item_id = facility_map.get(facility_name)
+        if not target_item_id:
+            self.logger.error(f"Facility '{facility_name}' not found in map.")
+            return False
+
+        try:
+            # 1. Find the dialog.
+            if not self.main_window: return False
+            
+            # Search for the dialog as a child of the main window
+            facility_dialog = self.main_window.child_window(title="Select Facility", control_type="Window")
+            
+            if not facility_dialog.exists(timeout=5):
+                self.logger.info("'Select Facility' dialog did not appear. Continuing...")
+                return True
+
+            self.logger.info("'Select Facility' dialog found. Selecting facility...")
+            facility_dialog.set_focus()
+
+            # 2. Find the table control.
+            table = facility_dialog.child_window(auto_id="fg", control_type="Table")
+            table.wait('visible', timeout=5)
+
+            # 3. Find the item directly using the ID from the map.
+            self.logger.info(f"Searching for facility item with ID: '{target_item_id}'...")
+            facility_item = facility_dialog.child_window(
+                title=target_item_id,
+                control_type="DataItem"
+            )
+            facility_item.wait('visible', timeout=5)
+
+            # 4. Click the item.
+            self.logger.info(f"Clicking the row for '{facility_name}'...")
+            facility_item.click_input()
+            time.sleep(0.5)
+
+            # 5. Click OK.
+            ok_button = facility_dialog.child_window(title="OK", control_type="Button")
+            ok_button.click_input()
+            self.logger.info("Clicked 'OK' on Select Facility dialog.")
+            time.sleep(2)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error handling Scheduling facility selection: {e}")
             return False

@@ -32,62 +32,60 @@ def main():
         facility_name = config.get("RPA_Settings", "facility_name", fallback="Brookline/Allston")
         max_login_wait = config.getint("RPA_Settings", "max_login_wait_seconds", fallback=180)
 
-        # 2. Use the DYNAMIC automation class from theraoffice_automation.py
+        # 2. Initialize and perform the login sequence
         extractor = TheraOfficeExtractor(config, logger)
 
-        # Launch the app dynamically
         if not extractor.launch_and_connect():
             logger.critical("PROCESS FAILED: Dynamic launch failed.")
             return
 
-        # Log in dynamically (without using coordinates)
         if not extractor.login():
             logger.critical("PROCESS FAILED: Dynamic login failed.")
             return
 
         logger.info("Dynamic login succeeded.")
         
-        # 3. Wait for the next screen after login
-        logger.info("Waiting for a logged-in state (facility dialog or main window)...")
+        # 3. Wait for and handle the Facility selection window
         state = extractor.wait_until_logged_in(max_wait_seconds=max_login_wait)
-
-        if state is None or state == "timeout":
-            logger.critical("Timed out waiting for login to complete. Aborting.")
-            return
-
-        # 4. Handle the Facility selection window
         if state == "facility":
-            logger.info(f"Facility selection dialog detected; selecting '{facility_name}'...")
             if not extractor.select_facility(facility_name):
                 logger.critical("Failed to select facility. Aborting.")
                 return
+            logger.info("Facility selected successfully.")
+        
+        # --- THE CORRECTED LOGIC ---
+        # 4. Immediately after facility selection, check for and dismiss the pop-up.
+        # This is the correct time to look for it.
+        extractor.dismiss_shared_user_accounts_warning()
 
-            logger.info("Facility selected. Waiting for main window again...")
-            state = extractor.wait_until_logged_in(max_wait_seconds=60)
-
+        # 5. Now, wait for the main window to become fully active.
+        logger.info("Waiting for main window to become active...")
+        state = extractor.wait_until_logged_in(max_wait_seconds=60)
+        
         if state != "main":
-            logger.critical(f"Could not find main window after login. State: {state}")
+            logger.critical(f"Could not detect active main window after setup. Final state: {state}")
             return
         
         logger.info("Main window is ready.")
 
-        # 5. Dismiss any popups and continue your automation
-        extractor.dismiss_shared_user_accounts_warning()
-
+        # 6. Navigate to the Scheduling module.
         if extractor.navigate_to_scheduling():
+            logger.info("Navigated to Scheduling.")
+            
+            # --- NEW STEP: Handle the facility selection inside Scheduling ---
+            if extractor.handle_scheduling_facility(facility_name):
+                logger.info("Scheduling facility handled.")
+            
             logger.info("Now ready to search for patients...")
-            # Your code to search for patients and extract data will go here.
+            # extractor.search_for_patient("Kantor") # Uncomment when ready
         
-        logger.info("Automation workflow can now proceed.")
-        # Your patient processing logic would go here
-
-    except Exception as e:
-        logger.critical(f"An unhandled error occurred in main(): {e}", exc_info=True)
+        logger.info("Automation workflow finished.")
 
     finally:
         logger.info("==============================================")
         logger.info("=== TheraOffice Automation (DYNAMIC) FINISHED ===")
         logger.info("==============================================")
+
 
 if __name__ == "__main__":
     main()
