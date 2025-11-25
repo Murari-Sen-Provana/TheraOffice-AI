@@ -74,6 +74,10 @@ def main():
         # 5. Dismiss any popups and continue your automation
         extractor.dismiss_shared_user_accounts_warning()
 
+        if extractor.navigate_to_scheduling():
+            logger.info("Now ready to search for patients...")
+            # Your code to search for patients and extract data will go here.
+        
         logger.info("Automation workflow can now proceed.")
         # Your patient processing logic would go here
 

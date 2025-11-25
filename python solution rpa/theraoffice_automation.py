@@ -251,7 +251,7 @@ class TheraOfficeExtractor:
         self.logger.info(f"Facility '{facility_name}' has been selected successfully.")
         return True
     
-    
+
      # Placeholder for the rest of your automation workflow
     def run_single_patient_export(self, patient_last_name):
         self.logger.info(f"--- Starting data export for patient: {patient_last_name} ---")
@@ -403,62 +403,37 @@ class TheraOfficeExtractor:
             self.logger.error(f"Failed to print control identifiers: {e}", exc_info=True)
         self.logger.info("=== END MAIN WINDOW CONTROL TREE DUMP ===")
     
-    def dismiss_shared_user_accounts_warning(self, timeout=40):
+    def dismiss_shared_user_accounts_warning(self, timeout=15):
         """
-        Dismiss the Shared User Accounts popup (OK button).
-        Uses deep UIA recursive search so it works even on WinForms/DevExpress dialogs.
+        Finds and dismisses the 'Shared User Accounts' popup by its title
+        and then clicks the 'OK' button within it.
         """
-        self.logger.info("Scanning for Shared User Accounts OK button...")
+        self.logger.info("Scanning for 'Shared User Accounts' popup...")
+        from pywinauto import Desktop
 
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                # Enumerate ALL top-level windows in the app
-                for win in self.app.windows():
-                    try:
-                        # Try direct search first
-                        ok = win.child_window(auto_id="SimpleButtonOK", control_type="Button")
-                        if ok.exists() and ok.is_visible():
-                            self.logger.info(f"Found OK button in window '{win.window_text()}'. Clicking...")
-                            try:
-                                ok.invoke()
-                            except:
-                                ok.click_input()
-                            time.sleep(1)
-                            self.logger.info("OK popup dismissed.")
-                            return True
-                    except:
-                        pass
+        try:
+            # Search the entire desktop for the popup window by its title.
+            # We use a short timeout because it should appear quickly if it's going to.
+            popup_window = Desktop(backend="uia").window(title="Shared User Accounts")
+            popup_window.wait('visible', timeout=timeout)
+            
+            self.logger.info("Found 'Shared User Accounts' popup. Looking for OK button...")
+            
+            # Find the OK button within the popup window.
+            # Based on the screenshot, its title is simply "OK".
+            ok_button = popup_window.child_window(title="OK", control_type="Button")
+            ok_button.wait('enabled', timeout=5)
+            
+            # Click the button to dismiss the dialog.
+            ok_button.click_input()
+            self.logger.info("Clicked 'OK' to dismiss the Shared User Accounts popup.")
+            time.sleep(2) # Wait a moment for the dialog to close
+            return True
 
-                    # Deep recursive UIA search
-                    try:
-                        descendants = win.descendants()
-                        for d in descendants:
-                            try:
-                                if d.control_type == "Button" and d.element_info.automation_id == "SimpleButtonOK":
-                                    self.logger.info(
-                                        f"Found OK button deep inside window '{win.window_text()}'. Clicking..."
-                                    )
-                                    try:
-                                        d.invoke()
-                                    except:
-                                        d.click_input()
-
-                                    time.sleep(1)
-                                    self.logger.info("OK popup dismissed.")
-                                    return True
-                            except:
-                                continue
-                    except:
-                        continue
-
-            except Exception as e:
-                self.logger.error(f"Error scanning windows for OK popup: {e}")
-
-            time.sleep(0.3)
-
-        self.logger.warning("Did NOT detect Shared User Accounts popup within timeout.")
-        return False
+        except Exception:
+            # This is not an error, it just means the popup didn't appear this time.
+            self.logger.warning(f"Did NOT detect 'Shared User Accounts' popup within {timeout} seconds. Continuing...")
+            return False
 
 
     def find_window(self, name=None, automation_id=None, class_name=None):
@@ -492,3 +467,44 @@ class TheraOfficeExtractor:
         self.logger.warning(f"Popup '{title}' not found in time.")
         return False
 
+    
+    
+    def navigate_to_scheduling(self) -> bool:
+        """
+        Navigates to the Scheduling module by finding the 'Modules' toolbar
+        and then clicking the 'Scheduling' button specifically within that toolbar.
+        """
+        self.logger.info("Navigating to the Scheduling module...")
+        try:
+            if not self.main_window or not self.main_window.exists():
+                self.logger.error("Main window not found. Cannot navigate to Scheduling.")
+                return False
+
+            # --- THE FINAL, DEFINITIVE FIX ---
+            # 1. First, find the parent toolbar named "Modules".
+            self.logger.info("Finding the 'Modules' toolbar...")
+            modules_toolbar = self.main_window.child_window(
+                title="Modules",
+                control_type="ToolBar"
+            )
+            modules_toolbar.wait('visible', timeout=10)
+
+            # 2. Then, find the "Scheduling" button INSIDE that specific toolbar.
+            self.logger.info("Finding the 'Scheduling' button within the 'Modules' toolbar...")
+            scheduling_button = modules_toolbar.child_window(
+                title="Scheduling",
+                control_type="Button"
+            )
+            scheduling_button.wait('visible', timeout=5)
+            
+            # 3. Click the button.
+            self.logger.info("Clicking the 'Scheduling' button...")
+            scheduling_button.click_input()
+            
+            self.logger.info("Successfully navigated to Scheduling.")
+            time.sleep(3) # Wait for the scheduling view to load
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to navigate to Scheduling. Error: {e}", exc_info=True)
+            return False
