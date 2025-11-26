@@ -1,7 +1,7 @@
 # main.py
 import os
 import configparser
-
+import time
 from logger_setup import setup_logger
 from theraoffice_automation import TheraOfficeExtractor
 # We DO NOT import the bruteforce_launcher anymore
@@ -52,12 +52,29 @@ def main():
                 logger.critical("Failed to select facility. Aborting.")
                 return
             logger.info("Facility selected successfully.")
-        
-        # --- THE CORRECTED LOGIC ---
-        # 4. Immediately after facility selection, check for and dismiss the pop-up.
-        # This is the correct time to look for it.
-        extractor.dismiss_shared_user_accounts_warning()
 
+        # --- UPDATED POPUP HANDLING WITH DIAGNOSTIC ---
+        logger.info("Waiting 3 seconds for popup to appear...")
+        time.sleep(3)
+        # Optional: Run diagnostic to see popup structure (comment out after first run)
+        # extractor.debug_popup_structure()
+
+        # DIAGNOSTIC: List all windows to find the popup
+        logger.info("Running diagnostic to find all windows...")
+        extractor.debug_all_windows()
+
+        # Now try to dismiss the popup
+        logger.info("\nAttempting to dismiss popup...")
+        if not extractor.dismiss_shared_user_accounts_warning():
+            logger.warning("Could not dismiss popup automatically.")
+            # Give extra time for manual dismissal
+            # Final diagnostic: try one more time to find it
+            logger.info("Running final window scan...")
+            extractor.debug_all_windows()
+    
+            logger.info("Waiting 15 seconds for manual dismissal...")
+            logger.info(">>> PLEASE CLICK THE OK BUTTON MANUALLY NOW <<<")
+            time.sleep(15)  
         # 5. Now, wait for the main window to become fully active.
         logger.info("Waiting for main window to become active...")
         state = extractor.wait_until_logged_in(max_wait_seconds=60)
@@ -72,14 +89,18 @@ def main():
         if extractor.navigate_to_scheduling():
             logger.info("Navigated to Scheduling.")
             
-            # --- NEW STEP: Handle the facility selection inside Scheduling ---
+            # Handle the facility selection inside Scheduling
             if extractor.handle_scheduling_facility(facility_name):
                 logger.info("Scheduling facility handled.")
             
-            logger.info("Now ready to search for patients...")
-            # extractor.search_for_patient("Kantor") # Uncomment when ready
+            # --- NEW STEP: Search and Diagnose ---
+            patient_name = "Kantor" # Replace with a real test name if needed
+            if extractor.search_for_patient(patient_name):
+                logger.info("Search executed. Running diagnostic to find the results table...")
+                extractor.debug_search_results()
         
         logger.info("Automation workflow finished.")
+
 
     finally:
         logger.info("==============================================")

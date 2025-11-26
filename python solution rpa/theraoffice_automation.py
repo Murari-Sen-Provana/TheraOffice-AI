@@ -8,6 +8,7 @@ from pywinauto.application import Application
 from playwright.sync_api import sync_playwright
 from pywinauto.keyboard import send_keys
 import time
+import pyautogui
 from pywinauto import Desktop
 from playwright.sync_api import sync_playwright
 
@@ -33,6 +34,190 @@ class TheraOfficeExtractor:
 
         self.app = None
         self.main_window = None
+
+    def find_shared_accounts_popup(self):
+        """
+        Comprehensive search for the Shared User Accounts popup using multiple methods.
+        Returns the popup window object if found, None otherwise.
+        """
+        from pywinauto import Desktop
+        self.logger.info("Searching for popup using multiple methods...")
+        # Method 1: Search by exact title
+        try:
+            popup = Desktop(backend="uia").window(title="Shared User Accounts")
+            if popup.exists() and popup.is_visible():
+                self.logger.info("Found popup via exact title match.")
+                return popup
+        except:
+            pass
+        # Method 2: Search by title regex
+        try:
+            popup = Desktop(backend="uia").window(title_re=".*[Ss]hared.*[Uu]ser.*[Aa]ccounts.*")
+            if popup.exists() and popup.is_visible():
+                self.logger.info("Found popup via regex title match.")
+                return popup
+        except:
+            pass
+        # Method 3: Search by automation ID
+        try:
+            popup = Desktop(backend="uia").window(auto_id="frmSharedAccounts")
+            if popup.exists() and popup.is_visible():
+                self.logger.info("Found popup via automation ID.")
+                return popup
+        except:
+            pass
+        # Method 4: Search all windows in the TheraOffice process
+        try:
+            if self.app:
+                windows = Desktop(backend="uia").windows(process=self.app.process)
+                for win in windows:
+                    try:
+                        title = win.window_text().lower()
+                        if "shared" in title and "user" in title:
+                            if win.is_visible():
+                                self.logger.info(f"Found popup via process scan: '{win.window_text()}'")
+                                return win
+                    except:
+                        continue
+        except:
+            pass
+        # Method 5: Look for any dialog-type window
+        try:
+            if self.app:
+                windows = Desktop(backend="uia").windows(process=self.app.process)
+                for win in windows:
+                    try:
+                        if win.class_name() == "#32770" or "dialog" in win.class_name().lower():  # Common dialog class
+                            if win.is_visible():
+                                # Check if it has an OK button
+                                try:
+                                    ok_btn = win.child_window(title="OK", control_type="Button")
+                                    if ok_btn.exists():
+                                        self.logger.info(f"Found dialog with OK button: '{win.window_text()}'")
+                                        return win
+                                except:
+                                    pass
+                    except:
+                        continue
+        except:
+            pass
+        return None
+
+    def dismiss_shared_user_accounts_warning(self, timeout=30):
+        """
+        Dismisses the popup by finding it as a CHILD of the main window (crucial)
+        and then using physical mouse clicks to bypass any UI automation blocks.
+        """
+        self.logger.info("Scanning for 'Shared User Accounts' popup (Child Window Strategy)...")
+        from pywinauto import Desktop
+        import time
+        import pyautogui
+
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                # 1. Find the Main Application Window first
+                # We use the class name which is stable
+                main_window_class = "WindowsForms10.Window.8.app.0.1629f15_r7_ad1"
+                main_win = Desktop(backend="uia").window(class_name=main_window_class)
+                
+                if not main_win.exists():
+                    time.sleep(0.5)
+                    continue
+
+                # 2. Look for the popup INSIDE the main window
+                # We try by Automation ID first, then Title
+                popup = main_win.child_window(auto_id="frmSharedAccounts")
+                if not popup.exists():
+                    popup = main_win.child_window(title="Shared User Accounts")
+                
+                # 3. Check if popup exists
+                if not popup.exists():
+                    # If popup is gone, check if main window is enabled (interactive)
+                    if main_win.is_enabled():
+                        self.logger.info("Main window is enabled. Popup is gone.")
+                        return True
+                    time.sleep(0.5)
+                    continue
+
+                self.logger.info("Popup found! Calculating coordinates for physical click...")
+                
+                # 4. Find the OK Button
+                ok_btn = popup.child_window(auto_id="SimpleButtonOK")
+                
+                if ok_btn.exists():
+                    # Get the absolute screen coordinates
+                    rect = ok_btn.rectangle()
+                    center_x = rect.mid_point().x
+                    center_y = rect.mid_point().y
+                    
+                    self.logger.info(f"Targeting OK button at ({center_x}, {center_y})...")
+                    
+                    # 5. Perform Physical Click
+                    # Move mouse
+                    pyautogui.moveTo(center_x, center_y)
+                    time.sleep(0.2)
+                    # Click
+                    pyautogui.click()
+                    self.logger.info("Physical click sent.")
+                    
+                    # 6. Backup: Physical Enter Key
+                    time.sleep(0.5)
+                    if popup.exists():
+                        self.logger.info("Click didn't close it immediately. Sending physical ENTER...")
+                        pyautogui.press('enter')
+                    
+                    time.sleep(1)
+                    if not popup.exists():
+                        self.logger.info("Popup dismissed successfully.")
+                        return True
+                else:
+                    self.logger.warning("Popup found, but OK button not detected yet.")
+
+            except Exception as e:
+                self.logger.debug(f"Error in popup loop: {e}")
+                time.sleep(1)
+        
+        self.logger.error("Timeout: Could not dismiss popup.")
+        return False
+    
+
+    def debug_all_windows(self):
+        """
+        Emergency diagnostic: List ALL windows in the TheraOffice process.
+        """
+        from pywinauto import Desktop
+        self.logger.info("=== LISTING ALL THERAOFFICE WINDOWS ===")
+        try:
+            if not self.app:
+                self.logger.error("App not connected!")
+                return
+            windows = Desktop(backend="uia").windows(process=self.app.process)
+            self.logger.info(f"Found {len(windows)} windows in process {self.app.process}")
+            for idx, win in enumerate(windows):
+                try:
+                    self.logger.info(f"\n--- Window {idx} ---")
+                    self.logger.info(f"  Title: '{win.window_text()}'")
+                    self.logger.info(f"  Class: '{win.class_name()}'")
+                    self.logger.info(f"  Handle: 0x{win.handle:x}")
+                    self.logger.info(f"  Visible: {win.is_visible()}")
+                    self.logger.info(f"  Enabled: {win.is_enabled()}")
+                    # Try to list children
+                    try:
+                        children = win.children()
+                        self.logger.info(f"  Children count: {len(children)}")
+                        for child in children[:5]:  # First 5 children only
+                            try:
+                                self.logger.info(f"    - {child.window_text()} ({child.control_type()})")
+                            except:
+                                pass
+                    except:
+                        pass
+                except Exception as e:
+                    self.logger.info(f"  Error reading window {idx}: {e}")
+            self.logger.info("=== END WINDOW LIST ===")
+        except Exception as e:
+            self.logger.error(f"Failed to list windows: {e}", exc_info=True)
 
     def _kill_existing_processes(self):
         """Ensures a clean state by terminating any lingering TheraOffice processes."""
@@ -404,69 +589,165 @@ class TheraOfficeExtractor:
         self.logger.info("=== END MAIN WINDOW CONTROL TREE DUMP ===")
     
     
-    def dismiss_shared_user_accounts_warning(self, timeout=30):
+    def dismiss_shared_user_accounts_warning(self, timeout=40):
         """
-        Aggressively attempts to dismiss the 'Shared User Accounts' popup using
-        multiple strategies until it is confirmed to be gone.
+        Dismisses the 'Shared User Accounts' popup.
+        Searches by title instead of automation ID for better reliability.
         """
         self.logger.info("Scanning for 'Shared User Accounts' popup...")
         from pywinauto import Desktop
-        from pywinauto.keyboard import send_keys
         import time
 
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                # 1. Check if the popup exists
-                popup = Desktop(backend="uia").window(auto_id="frmSharedAccounts")
-                
-                if not popup.exists() or not popup.is_visible():
-                    # If popup is gone, check if main window is enabled to be sure
-                    main_window_class = "WindowsForms10.Window.8.app.0.1629f15_r7_ad1"
-                    main_win = Desktop(backend="uia").window(class_name=main_window_class)
-                    if main_win.exists() and main_win.is_enabled():
-                        self.logger.info("Popup is gone and main window is enabled.")
-                        return True
-                    else:
-                        # Popup might be gone, but main window still disabled? Wait a bit.
-                        time.sleep(0.5)
-                        continue
+                # Search by window title "Shared User Accounts" instead of auto_id
+                popup = Desktop(backend="uia").window(title="Shared User Accounts")
 
-                self.logger.info("Popup found. Attempting to dismiss...")
+                if not popup.exists():
+                    time.sleep(0.5)
+                    continue
 
-                # --- STRATEGY 1: Click OK Button ---
+                if not popup.is_visible():
+                    time.sleep(0.5)
+                    continue
+
+                self.logger.info("'Shared User Accounts' popup found!")
+
+                # Give the popup a moment to fully render
+                time.sleep(0.5)
+
+                # --- METHOD 1: Keyboard Enter (Most Reliable for Default Buttons) ---
                 try:
-                    ok_btn = popup.child_window(auto_id="SimpleButtonOK", control_type="Button")
-                    if ok_btn.exists():
-                        self.logger.info("Strategy 1: Clicking 'OK' button...")
-                        ok_btn.set_focus()
-                        ok_btn.click_input()
-                except: pass
-
-                # --- STRATEGY 2: Send ENTER ---
-                try:
-                    self.logger.info("Strategy 2: Sending ENTER...")
+                    self.logger.info("Method 1: Pressing Enter key...")
                     popup.set_focus()
-                    send_keys('{ENTER}')
-                except: pass
+                    time.sleep(0.3)
+                    popup.type_keys('{ENTER}')
+                    time.sleep(1.5)
 
-                # --- STRATEGY 3: Click Close (X) ---
-                try:
-                    close_btn = popup.child_window(title="Close", control_type="Button")
-                    if close_btn.exists():
-                        self.logger.info("Strategy 3: Clicking 'Close' button...")
-                        close_btn.click_input()
-                except: pass
-                
-                # Wait a moment to see if it worked
+                    if not popup.exists():
+                        self.logger.info("SUCCESS: Popup dismissed via Enter key.")
+                        # Wait a bit more for app to stabilize
+                        time.sleep(2)
+                        return True
+                except Exception as e:
+                    self.logger.debug(f"Method 1 failed: {e}")
+
+                # --- METHOD 2: Click OK Button by Title ---
+                if popup.exists():
+                    try:
+                        self.logger.info("Method 2: Clicking OK button by title...")
+                        ok_button = popup.child_window(title="OK", control_type="Button")
+
+                        if ok_button.exists():
+                            ok_button.set_focus()
+                            time.sleep(0.3)
+                            ok_button.click_input()
+                            time.sleep(1.5)
+
+                            if not popup.exists():
+                                self.logger.info("SUCCESS: Popup dismissed via OK button click.")
+                                time.sleep(2)
+                                return True
+                    except Exception as e:
+                        self.logger.debug(f"Method 2 failed: {e}")
+
+                # --- METHOD 3: Alt+O Keyboard Shortcut ---
+                if popup.exists():
+                    try:
+                        self.logger.info("Method 3: Alt+O shortcut...")
+                        popup.set_focus()
+                        time.sleep(0.3)
+                        popup.type_keys('%o')
+                        time.sleep(1.5)
+
+                        if not popup.exists():
+                            self.logger.info("SUCCESS: Popup dismissed via Alt+O.")
+                            time.sleep(2)
+                            return True
+                    except Exception as e:
+                        self.logger.debug(f"Method 3 failed: {e}")
+
+                # --- METHOD 4: Try finding button by automation ID ---
+                if popup.exists():
+                    try:
+                        self.logger.info("Method 4: Searching for button by auto_id...")
+                        # Try common automation IDs for OK buttons
+                        for auto_id in ["SimpleButtonOK", "btnOK", "okButton", "OK"]:
+                            try:
+                                ok_button = popup.child_window(auto_id=auto_id, control_type="Button")
+                                if ok_button.exists():
+                                    self.logger.info(f"Found button with auto_id: {auto_id}")
+                                    ok_button.click_input()
+                                    time.sleep(1.5)
+                                    if not popup.exists():
+                                        self.logger.info("SUCCESS: Popup dismissed via auto_id button.")
+                                        time.sleep(2)
+                                        return True
+                                    break
+                            except:
+                                continue
+                    except Exception as e:
+                        self.logger.debug(f"Method 4 failed: {e}")
+
+                # --- METHOD 5: Close the window directly ---
+                if popup.exists():
+                    try:
+                        self.logger.info("Method 5: Closing popup window...")
+                        popup.close()
+                        time.sleep(1.5)
+
+                        if not popup.exists():
+                            self.logger.info("SUCCESS: Popup closed directly.")
+                            time.sleep(2)
+                            return True
+                    except Exception as e:
+                        self.logger.debug(f"Method 5 failed: {e}")
+
+                # --- METHOD 6: Space bar (activates focused button) ---
+                if popup.exists():
+                    try:
+                        self.logger.info("Method 6: Space bar...")
+                        popup.set_focus()
+                        time.sleep(0.3)
+                        popup.type_keys(' ')
+                        time.sleep(1.5)
+
+                        if not popup.exists():
+                            self.logger.info("SUCCESS: Popup dismissed via Space bar.")
+                            time.sleep(2)
+                            return True
+                    except Exception as e:
+                        self.logger.debug(f"Method 6 failed: {e}")
+
+                self.logger.warning("All methods failed this iteration. Retrying...")
                 time.sleep(1)
 
             except Exception as e:
-                self.logger.warning(f"Error during popup handling: {e}")
-                time.sleep(1)
+                # Popup doesn't exist or other error
+                time.sleep(0.5)
 
-        self.logger.warning("Timeout reached. Popup may still be present.")
+        self.logger.error("Timeout: Could not dismiss 'Shared User Accounts' popup.")
+        self.logger.info("The popup may be blocking further automation. Manual intervention may be required.")
         return False
+
+    def debug_popup_structure(self):
+        """
+        Diagnostic method to inspect the popup's structure.
+        Call this if dismiss_shared_user_accounts_warning fails.
+        """
+        from pywinauto import Desktop
+        try:
+            popup = Desktop(backend="uia").window(title="Shared User Accounts")
+            if popup.exists():
+                self.logger.info("=== SHARED USER ACCOUNTS POPUP STRUCTURE ===")
+                popup.print_control_identifiers()
+                self.logger.info("=== END POPUP STRUCTURE ===")
+            else:
+                self.logger.error("Popup not found for debugging.")
+        except Exception as e:
+            self.logger.error(f"Debug failed: {e}", exc_info=True)
+    
 
 
     def find_window(self, name=None, automation_id=None, class_name=None):
@@ -545,9 +826,11 @@ class TheraOfficeExtractor:
     def search_for_patient(self, patient_name: str) -> bool:
         """
         Finds the patient search box, clicks it to focus, and types the patient's name.
-        This method uses keyboard simulation which is more reliable for search bars.
         """
         self.logger.info(f"Searching for patient: '{patient_name}'...")
+        from pywinauto.keyboard import send_keys
+        import time
+        
         try:
             if not self.main_window or not self.main_window.exists():
                 self.logger.error("Main window not found. Cannot search for patient.")
@@ -561,7 +844,6 @@ class TheraOfficeExtractor:
             )
             search_box.wait('visible', timeout=10)
             
-            # --- THE FIX: CLICK AND TYPE ---
             # 1. Click to focus the search box
             self.logger.info("Clicking search box to focus...")
             search_box.click_input()
@@ -574,15 +856,30 @@ class TheraOfficeExtractor:
             
             # 3. Press Enter to search
             self.logger.info("Pressing Enter...")
-            search_box.type_keys('{ENTER}')
+            send_keys('{ENTER}')
             
             self.logger.info("Patient search initiated.")
-            time.sleep(3) # Wait for search results to load
+            time.sleep(5) # Wait for search results to load
             return True
 
         except Exception as e:
             self.logger.error(f"Failed to search for patient. Error: {e}", exc_info=True)
             return False
+
+    def debug_search_results(self):
+        """
+        DIAGNOSTIC: Prints controls after searching to help us identify the 
+        Patient Results table structure.
+        """
+        self.logger.info("--- STARTING SEARCH RESULTS DIAGNOSTIC ---")
+        try:
+            # Print the control identifiers to the log
+            self.main_window.print_control_identifiers()
+            self.logger.info("--- FINISHED SEARCH RESULTS DIAGNOSTIC ---")
+            self.logger.error("Please copy the 'Control Identifiers' output from the terminal.")
+        except Exception as e:
+            self.logger.error(f"Diagnostic failed: {e}")
+
 
 
     def debug_scheduling_screen(self):
